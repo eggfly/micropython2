@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: mpy-tools.py",
+            "type": "python",
+            // "args": ["-f", "/Users/eggfly/AlphaPi/rootfs/actuator_led.mpy"],
+            // "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/sensor_infrared.mpy"],
+            "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/control_board_v1.mpy"],
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/mpy-tool.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

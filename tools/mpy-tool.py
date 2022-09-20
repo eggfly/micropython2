@@ -962,12 +962,12 @@ class RawCodeBytecode(RawCode):
         super(RawCodeBytecode, self).__init__(
             parent_name, qstr_table, fun_data, 0, MP_CODE_BYTECODE
         )
-
     def disassemble(self):
         bc = self.fun_data
         print("simple_name:", self.simple_name.str)
         print("  raw bytecode:", len(bc), hexlify_to_str(bc))
-        print("  prelude:", self.prelude_signature)
+        print("  prelude: n_state=%s, n_exc_stack=%s, scope_flags=%s, n_pos_args=%s, n_kwonly_args=%s, n_def_pos_args=%s" %
+              self.prelude_signature)
         print("  args:", [self.qstr_table[i].str for i in self.names[1:]])
         print("  line info:", hexlify_to_str(bc[self.offset_line_info : self.offset_opcodes]))
         ip = self.offset_opcodes
@@ -1089,7 +1089,7 @@ class RawCodeNative(RawCode):
         )
         if self.code_kind != MP_CODE_NATIVE_PY:
             return
-        print("  prelude:", self.prelude_signature)
+        print("  222 prelude:", self.prelude_signature)
         print("  args:", [self.qstr_table[i].str for i in self.names[1:]])
         print("  line info:", fun_data[self.offset_line_info : self.offset_opcodes])
         ip = 0
