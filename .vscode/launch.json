@@ -5,11 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: mpy-tools.py",
+            "name": "mpy-tools.py",
             "type": "python",
             // "args": ["-f", "/Users/eggfly/AlphaPi/rootfs/actuator_led.mpy"],
             // "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/sensor_infrared.mpy"],
-            "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/control_board_v1.mpy"],
+            // "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/control_board_v1.mpy"],
+            "args": ["-d", "/Users/eggfly/AlphaPi/test/test.mpy"],
             "request": "launch",
             "program": "${workspaceFolder}/tools/mpy-tool.py",
             "console": "integratedTerminal",

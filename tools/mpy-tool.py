@@ -27,6 +27,8 @@
 # Python 2/3 compatibility code
 from __future__ import print_function
 import platform
+from unicodedata import decomposition
+from mpy_ast import *
 
 if platform.python_version_tuple()[0] == "2":
     from binascii import hexlify as hexlify_py2
@@ -308,16 +310,16 @@ class Opcode:
         if op_name.startswith("MP_BC_"):
             mapping[locals()[op_name]] = op_name[len("MP_BC_") :]
     for i in range(MP_BC_LOAD_CONST_SMALL_INT_MULTI_NUM):
-        name = "LOAD_CONST_SMALL_INT %d" % (i - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS)
+        name = "LOAD_CONST_SMALL_INT_%d" % (i - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS)
         mapping[MP_BC_LOAD_CONST_SMALL_INT_MULTI + i] = name
     for i in range(MP_BC_LOAD_FAST_MULTI_NUM):
-        mapping[MP_BC_LOAD_FAST_MULTI + i] = "LOAD_FAST %d" % i
+        mapping[MP_BC_LOAD_FAST_MULTI + i] = "LOAD_FAST_%d" % i
     for i in range(MP_BC_STORE_FAST_MULTI_NUM):
-        mapping[MP_BC_STORE_FAST_MULTI + i] = "STORE_FAST %d" % i
+        mapping[MP_BC_STORE_FAST_MULTI + i] = "STORE_FAST_%d" % i
     for i in range(MP_BC_UNARY_OP_MULTI_NUM):
-        mapping[MP_BC_UNARY_OP_MULTI + i] = "UNARY_OP %d %s" % (i, mp_unary_op_method_name[i])
+        mapping[MP_BC_UNARY_OP_MULTI + i] = "UNARY_OP_%d(%s)" % (i, mp_unary_op_method_name[i])
     for i in range(MP_BC_BINARY_OP_MULTI_NUM):
-        mapping[MP_BC_BINARY_OP_MULTI + i] = "BINARY_OP %d %s" % (i, mp_binary_op_method_name[i])
+        mapping[MP_BC_BINARY_OP_MULTI + i] = "BINARY_OP_%d(%s)" % (i, mp_binary_op_method_name[i])
 
     def __init__(self, offset, fmt, opcode_byte, arg, extra_arg):
         self.offset = offset
@@ -971,9 +973,12 @@ class RawCodeBytecode(RawCode):
         print("  args:", [self.qstr_table[i].str for i in self.names[1:]])
         print("  line info:", hexlify_to_str(bc[self.offset_line_info : self.offset_opcodes]))
         ip = self.offset_opcodes
+        decompile_context = DecompileContext()
+
         while ip < len(bc):
             fmt, sz, arg, _ = mp_opcode_decode(bc, ip)
-            if bc[ip] == Opcode.MP_BC_LOAD_CONST_OBJ:
+            opcode = bc[ip]
+            if opcode == Opcode.MP_BC_LOAD_CONST_OBJ:
                 arg = repr(self.obj_table[arg])
             if fmt == MP_BC_FORMAT_QSTR:
                 arg = self.qstr_table[arg].str
@@ -982,10 +987,32 @@ class RawCodeBytecode(RawCode):
             else:
                 arg = ""
             print(
-                "  %-11s %s %s" % (hexlify_to_str(bc[ip : ip + sz]), Opcode.mapping[bc[ip]], arg)
+                "  %-11s %s %s" % (hexlify_to_str(bc[ip : ip + sz]), Opcode.mapping[opcode], arg)
             )
             ip += sz
+            # eggfly
+            self.decompile_bytecode(decompile_context, fmt, sz, opcode, arg, ip)
         self.disassemble_children()
+
+    def decompile_bytecode(self, ctx, fmt, sz, opcode, arg, ip):
+        opcode_str = Opcode.mapping[opcode]
+        if opcode_str.startswith('LOAD_CONST_SMALL_INT'):
+            int_val = opcode - Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI - \
+                Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS
+            ctx.stack.append(ASTObject(int_val))
+        elif opcode == Opcode.MP_BC_LOAD_CONST_NONE:
+            ctx.stack.append(None)
+        elif opcode == Opcode.MP_BC_IMPORT_NAME:
+            fromlist = ctx.stack.pop()
+            ctx.stack.append(ASTImport(arg, fromlist))
+        elif opcode == Opcode.MP_BC_STORE_NAME:
+            value = ctx.stack.pop()
+            var_name = arg
+            name_node = ASTName(var_name)
+            ctx.curblock.append(ASTStore(value, name_node))
+        else:
+            pass
+            # raise NotImplementedError('%s not implemented yet' %opcode_str)
 
     def freeze(self):
         # generate bytecode data
