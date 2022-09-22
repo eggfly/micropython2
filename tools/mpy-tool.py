@@ -1000,6 +1000,14 @@ class RawCodeBytecode(RawCode):
             int_val = opcode - Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI - \
                 Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS
             ctx.stack.append(ASTObject(int_val))
+        elif opcode_str.startswith('STORE_FAST'):
+            value = ctx.stack.pop()
+            num = opcode - Opcode.MP_BC_STORE_FAST_MULTI
+            # __local_var_0 可能代表参数0
+            name_node = ASTName('__local_var_%d'%num)
+            ctx.curblock.append(ASTStore(value, name_node))
+        elif opcode == Opcode.MP_BC_LOAD_CONST_STRING:
+            ctx.stack.append(ASTObject(arg))
         elif opcode == Opcode.MP_BC_LOAD_CONST_NONE:
             ctx.stack.append(None)
         elif opcode == Opcode.MP_BC_IMPORT_NAME:
@@ -1010,9 +1018,14 @@ class RawCodeBytecode(RawCode):
             var_name = arg
             name_node = ASTName(var_name)
             ctx.curblock.append(ASTStore(value, name_node))
+        elif opcode == Opcode.MP_BC_MAKE_FUNCTION:
+            ctx.stack.append(ASTFunction())
+        elif opcode == Opcode.MP_BC_RETURN_VALUE:
+            value = ctx.stack.pop()
+            ctx.curblock.append(ASTReturn(value))
         else:
-            pass
             # raise NotImplementedError('%s not implemented yet' %opcode_str)
+            print('%s not implemented yet' %opcode_str)
 
     def freeze(self):
         # generate bytecode data
