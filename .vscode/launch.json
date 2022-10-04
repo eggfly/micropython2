@@ -10,7 +10,7 @@
             // "args": ["-f", "/Users/eggfly/AlphaPi/rootfs/actuator_led.mpy"],
             // "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/sensor_infrared.mpy"],
             // "args": ["-d", "/Users/eggfly/AlphaPi/rootfs/control_board_v1.mpy"],
-            "args": ["-d", "/Users/eggfly/AlphaPi/test/test.mpy"],
+            "args": ["-d", "test.mpy"],
             "request": "launch",
             "program": "${workspaceFolder}/tools/mpy-tool.py",
             "console": "integratedTerminal",

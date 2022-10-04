@@ -26,6 +26,9 @@
 
 # Python 2/3 compatibility code
 from __future__ import print_function
+from ast import arg
+from asyncio import FastChildWatcher
+from cmath import exp
 import platform
 from unicodedata import decomposition
 from mpy_ast import *
@@ -327,6 +330,14 @@ class Opcode:
         self.opcode_byte = opcode_byte
         self.arg = arg
         self.extra_arg = extra_arg
+
+
+jump_opcodes = (Opcode.MP_BC_JUMP_IF_TRUE_OR_POP,
+                Opcode.MP_BC_POP_JUMP_IF_TRUE,
+                Opcode.MP_BC_POP_JUMP_IF_FALSE,
+                Opcode.MP_BC_JUMP,
+                Opcode.MP_BC_UNWIND_JUMP,
+                )
 
 
 # This definition of a small int covers all possible targets, in the sense that every
@@ -970,16 +981,19 @@ class RawCodeBytecode(RawCode):
         print("  raw bytecode:", len(bc), hexlify_to_str(bc))
         print("  prelude: n_state=%s, n_exc_stack=%s, scope_flags=%s, n_pos_args=%s, n_kwonly_args=%s, n_def_pos_args=%s" %
               self.prelude_signature)
-        print("  args:", [self.qstr_table[i].str for i in self.names[1:]])
+        func_args = [self.qstr_table[i].str for i in self.names[1:]]
+        g_func_args_dict[self.simple_name.str] = func_args
+        print("  args:", func_args)
         print("  line info:", hexlify_to_str(bc[self.offset_line_info : self.offset_opcodes]))
         ip = self.offset_opcodes
-        decompile_context = DecompileContext()
-
+        self.code_info = CodeInfo(self.simple_name.str, [], func_args)
         while ip < len(bc):
             fmt, sz, arg, _ = mp_opcode_decode(bc, ip)
             opcode = bc[ip]
             if opcode == Opcode.MP_BC_LOAD_CONST_OBJ:
-                arg = repr(self.obj_table[arg])
+                # arg = repr(self.obj_table[arg])
+                # eggfly mod
+                arg = self.obj_table[arg]
             if fmt == MP_BC_FORMAT_QSTR:
                 arg = self.qstr_table[arg].str
             elif fmt in (MP_BC_FORMAT_VAR_UINT, MP_BC_FORMAT_OFFSET):
@@ -991,42 +1005,307 @@ class RawCodeBytecode(RawCode):
             )
             ip += sz
             # eggfly
-            self.decompile_bytecode(decompile_context, fmt, sz, opcode, arg, ip)
+            opcode_str = Opcode.mapping[opcode]
+            code_line = CodeLine(ip, sz, opcode, opcode_str, arg)
+            self.code_info.code_lines.append(code_line)
+            # self.decompile_bytecode(decompile_context, func_args, fmt, sz, opcode, arg, ip)
+        self.decompile_code()
         self.disassemble_children()
 
-    def decompile_bytecode(self, ctx, fmt, sz, opcode, arg, ip):
+    def decompile_code(self):
+        self.generate_cfg()
+        decompile_context = DecompileContext()
+        for line in self.code_info.code_lines:
+            self.decompile_bytecode(decompile_context, self.code_info.func_args, line)
+        g_ast_dict[self.simple_name.str] = ASTNodeList(
+            decompile_context.defblock.ast_nodes)
+
+    def generate_cfg(self):
+        code_lines = self.code_info.code_lines
+        self.mark_jump_target(code_lines)
+        self.assign_labels(code_lines)
+        self.mark_jump_labels(code_lines)
+        new_code_lines = self.insert_nop_into_jumps(code_lines)
+        self.code_info.code_lines = new_code_lines
+    
+    def mark_jump_labels(self, code_lines):
+        for line in code_lines:
+            opcode = line.opcode
+            ip = line.ip
+            if opcode in jump_opcodes:
+                target_ip = ip+line.arg
+                for target_line in code_lines:
+                    if target_line.ip == target_ip:
+                        line.jump_to_label = target_line.label
+                        break
+
+    def assign_labels(self, code_lines):
+        label = 0
+        for line in code_lines:
+            if line.is_jump_target:
+                line.label = label
+                label += 1
+
+    def mark_jump_target(self, code_lines):
+        for line in code_lines:
+            opcode = line.opcode
+            ip = line.ip
+            if opcode in jump_opcodes:
+                target_ip = ip + line.arg
+                for target_line in code_lines:
+                    if target_line.ip == target_ip:
+                        target_line.is_jump_target = True
+
+    def insert_nop_into_jumps(self, code_lines):
+        result = []
+        for line in code_lines:
+            opcode = line.opcode
+            result.append(line)
+            if opcode in jump_opcodes:
+                result.append(BlockSplitCodeLine())
+        return result
+
+    def decompile_bytecode(self, ctx, func_args, line):
+        if type(line) is BlockSplitCodeLine:
+            ctx.curblock.append(ASTBlockNoOp())
+        else:
+            self.decompile_real_bytecode(ctx, func_args, line)
+
+    def decompile_real_bytecode(self, ctx, func_args, line):
+        if line.is_jump_target:
+            ctx.curblock.append(ASTLabel(line.label))
+        opcode = line.opcode
+        arg = line.arg
         opcode_str = Opcode.mapping[opcode]
-        if opcode_str.startswith('LOAD_CONST_SMALL_INT'):
-            int_val = opcode - Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI - \
-                Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS
-            ctx.stack.append(ASTObject(int_val))
-        elif opcode_str.startswith('STORE_FAST'):
-            value = ctx.stack.pop()
-            num = opcode - Opcode.MP_BC_STORE_FAST_MULTI
-            # __local_var_0 可能代表参数0
-            name_node = ASTName('__local_var_%d'%num)
-            ctx.curblock.append(ASTStore(value, name_node))
+        if opcode_str.startswith('LOAD_CONST_SMALL_INT_'):
+            self.decompile_load_const_small_int(ctx, opcode)
+        elif opcode == Opcode.MP_BC_LOAD_CONST_SMALL_INT:
+            self.decompile_load_const_small_int_operand(ctx, arg)
+        elif opcode_str.startswith('STORE_FAST_'):
+            if opcode == Opcode.MP_BC_STORE_FAST_N:
+                self.decompile_store_fast_n(ctx, func_args, arg)
+            else:
+                self.decompile_store_fast(ctx, func_args, opcode)
+        elif opcode_str.startswith('LOAD_FAST_'):
+            if opcode == Opcode.MP_BC_LOAD_FAST_N:
+                self.decompile_load_fast_n(ctx, func_args, arg)
+            else:
+                self.decompile_load_fast(ctx, func_args, opcode)
+        elif opcode_str.startswith('BINARY_OP'):
+            self.decompile_binary_op(ctx, opcode, opcode_str)
         elif opcode == Opcode.MP_BC_LOAD_CONST_STRING:
             ctx.stack.append(ASTObject(arg))
+        elif opcode == Opcode.MP_BC_LOAD_NAME or opcode == Opcode.MP_BC_LOAD_GLOBAL:
+            ctx.stack.append(ASTName(arg))
         elif opcode == Opcode.MP_BC_LOAD_CONST_NONE:
-            ctx.stack.append(None)
+            ctx.stack.append(ASTObject(None))
+        elif opcode == Opcode.MP_BC_LOAD_CONST_OBJ:
+            self.decompile_load_const_obj(ctx, arg)
         elif opcode == Opcode.MP_BC_IMPORT_NAME:
             fromlist = ctx.stack.pop()
             ctx.stack.append(ASTImport(arg, fromlist))
         elif opcode == Opcode.MP_BC_STORE_NAME:
-            value = ctx.stack.pop()
-            var_name = arg
-            name_node = ASTName(var_name)
-            ctx.curblock.append(ASTStore(value, name_node))
+            self.decompile_store_name(ctx, arg)
+        elif opcode == Opcode.MP_BC_STORE_GLOBAL:
+            self.decompile_store_global(ctx, arg)
+        elif opcode == Opcode.MP_BC_STORE_ATTR:
+            self.decompile_store_attr(ctx, arg)
         elif opcode == Opcode.MP_BC_MAKE_FUNCTION:
-            ctx.stack.append(ASTFunction())
+            ctx.stack.append(ASTFunction()) # TODO
         elif opcode == Opcode.MP_BC_RETURN_VALUE:
             value = ctx.stack.pop()
             ctx.curblock.append(ASTReturn(value))
+        elif opcode == Opcode.MP_BC_CALL_FUNCTION:
+            self.decompile_call_function(ctx, arg)
+        elif opcode == Opcode.MP_BC_CALL_METHOD:
+            self.decompile_call_method(ctx, arg)
+        elif opcode == Opcode.MP_BC_POP_TOP:
+            value = ctx.stack.pop()
+            ctx.curblock.append(value)
+        elif opcode == Opcode.MP_BC_BUILD_TUPLE:
+            self.decompile_build_tuple(ctx, arg)
+        elif opcode == Opcode.MP_BC_IMPORT_FROM:
+            ctx.stack.append(ASTName(arg))
+        elif opcode == Opcode.MP_BC_LOAD_ATTR or opcode == Opcode.MP_BC_LOAD_METHOD:
+            self.decompile_load_attr_or_load_method(ctx, arg)
+        elif opcode == Opcode.MP_BC_LOAD_SUBSCR:
+            self.decompile_load_subscr(ctx)
+        elif opcode == Opcode.MP_BC_STORE_SUBSCR:
+            self.decompile_store_subscr(ctx)
+        elif opcode == Opcode.MP_BC_BUILD_MAP:
+            ast_map = ASTMap(arg)
+            ctx.stack.append(ast_map)
+        elif opcode == Opcode.MP_BC_STORE_MAP:
+            self.decompile_store_map(ctx)
+        elif opcode == Opcode.MP_BC_LOAD_BUILD_CLASS:
+            ctx.stack.append(ASTLoadBuildClass())
+        elif opcode == Opcode.MP_BC_POP_JUMP_IF_TRUE:
+            self.decompile_pop_jump_if_true(ctx, arg, line.jump_to_label)
+        elif opcode == Opcode.MP_BC_POP_JUMP_IF_FALSE:
+            self.decompile_pop_jump_if_false(ctx, arg, line.jump_to_label)
+        elif opcode == Opcode.MP_BC_JUMP:
+            self.decompile_jump(ctx, arg, line.jump_to_label)
         else:
             # raise NotImplementedError('%s not implemented yet' %opcode_str)
             print('%s not implemented yet' %opcode_str)
 
+    def decompile_pop_jump_if_true(self, ctx, arg, jump_to_label):
+        expr = ctx.stack.pop()
+        ctx.block.append(ASTBranch(expr, True, arg, jump_to_label))
+
+    def decompile_pop_jump_if_false(self, ctx, arg, jump_to_label):
+        expr = ctx.stack.pop()
+        ctx.curblock.append(ASTBranch(expr, False, arg, jump_to_label))
+
+    def decompile_jump(self, ctx, arg, jump_to_label):
+        ctx.curblock.append(ASTJump(arg, jump_to_label))
+
+    def decompile_store_subscr(self, ctx):
+        subscr = ctx.stack.pop()
+        dest = ctx.stack.pop()
+        src = ctx.stack.pop()
+        ctx.curblock.append(ASTStore(src, ASTSubscr(dest, subscr)))
+
+    def decompile_store_attr(self, ctx, arg):
+        name = ctx.stack.pop()
+        value = ctx.stack.pop()
+        attr = ASTBinary(name, ASTName(arg), '__dot__', '.')
+        ctx.curblock.append(ASTStore(value, attr))
+
+    def decompile_store_map(self, ctx):
+        key = ctx.stack.pop()
+        value = ctx.stack.pop()
+        ast_map = ctx.stack.pop()
+        if type(ast_map) != ASTMap:
+            raise ValueError('must be ASTMap')
+        ast_map.kv_pairs.append((key, value))
+        ctx.stack.append(ast_map)
+
+    def decompile_load_const_obj(self, ctx, arg):
+        # value = eval(arg)
+        ctx.stack.append(ASTObject(arg))
+
+    def decompile_load_attr_or_load_method(self, ctx, arg):
+        name = ctx.stack.pop()
+        ctx.stack.append(ASTBinary(name, ASTName(arg), '__dot__', '.'))
+
+    def decompile_binary_op(self, ctx, opcode, opcode_str):
+        i = opcode - Opcode.MP_BC_BINARY_OP_MULTI
+        binary_op_name = mp_binary_op_method_name[i]
+        right = ctx.stack.pop()
+        left = ctx.stack.pop()
+        binary_node = None
+        if binary_op_name == '__iadd__':
+            binary_node = ASTBinary(left, right, '__iadd__', '+')
+        elif binary_op_name == '__add__':
+            binary_node = ASTBinary(left, right, '__add__', '+')
+        elif binary_op_name == '__gt__':
+            binary_node = ASTBinary(left, right, '__gt__', '>')
+        elif binary_op_name == '__lt__':
+            binary_node = ASTBinary(left, right, '__lt__', '<')
+        elif binary_op_name == '__eq__':
+            binary_node = ASTBinary(left, right, '__eq__', '==')
+        elif binary_op_name == '__ne__':
+            binary_node = ASTBinary(left, right, '__ne__', '!=')
+        else:
+            print('%s not implemented yet' %opcode_str)
+        ctx.stack.append(binary_node)
+
+    def decompile_build_tuple(self, ctx, arg):
+        values = [None] * arg
+        for i in range(arg):
+            values[arg-i-1] = ctx.stack.pop()
+        ctx.stack.append(ASTTuple(values))
+
+    def decompile_load_subscr(self, ctx):
+        subscr = ctx.stack.pop()
+        src = ctx.stack.pop()
+        ctx.stack.append(ASTSubscr(src, subscr))
+
+    def decompile_load_const_small_int(self, ctx, opcode):
+        int_val = opcode - Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI - \
+                Opcode.MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS
+        ctx.stack.append(ASTObject(int_val))
+
+    def decompile_load_const_small_int_operand(self, ctx, arg):
+        int_val = arg
+        ctx.stack.append(ASTObject(int_val))
+
+    def decompile_load_fast(self, ctx, func_args, opcode):
+        num = opcode - Opcode.MP_BC_LOAD_FAST_MULTI
+        self.decompile_load_fast_n(ctx, func_args, num)
+
+    def decompile_load_fast_n(self, ctx, func_args, num):
+        name_node = self.get_func_args_name(func_args, num)
+        ctx.stack.append(name_node)
+
+    def decompile_call_function(self, ctx, arg):
+        kwparams = (arg & 0xFF00) >> 8
+        pparams = (arg & 0xFF)
+        kwparamList = []
+        pparamList = []
+        for i in range(kwparams):
+            val = ctx.stack.pop()
+            key = ctx.stack.pop()
+            pair = (key, val)
+            kwparamList.insert(0, pair)
+        for i in range(pparams):
+            param = ctx.stack.pop()
+            pparamList.insert(0, param)
+        func = ctx.stack.pop()
+        if type(func) is ASTLoadBuildClass:
+            ctx.stack.append(ASTLoadBuildClass)
+            # ASTCall(func, pparamList, kwparamList)
+        elif type(func) is not ASTName:
+            raise ValueError('TOS here must be an ASTName')
+        else:
+            ctx.stack.append(ASTCall(func, pparamList, kwparamList))
+
+    def decompile_call_method(self, ctx, arg):
+        # TODO: different with call_function?
+        kwparams = (arg & 0xFF00) >> 8
+        pparams = (arg & 0xFF)
+        kwparamList = []
+        pparamList = []
+        for i in range(kwparams):
+            val = ctx.stack.pop()
+            key = ctx.stack.pop()
+            pair = (key, val)
+            kwparamList.insert(0, pair)
+        for i in range(pparams):
+            param = ctx.stack.pop()
+            pparamList.insert(0, param)
+        method = ctx.stack.pop()
+        ctx.stack.append(ASTCall(method, pparamList, kwparamList))
+
+    def decompile_store_name(self, ctx, arg):
+        value = ctx.stack.pop()
+        var_name = arg
+        name_node = ASTName(var_name)
+        ctx.curblock.append(ASTStore(value, name_node))
+
+    def decompile_store_global(self, ctx, arg):
+        value = ctx.stack.pop()
+        var_name = arg
+        name_node = ASTName(var_name)
+        ctx.curblock.append(ASTStore(value, name_node))
+
+    def decompile_store_fast(self, ctx, func_args, opcode):
+        num = opcode - Opcode.MP_BC_STORE_FAST_MULTI
+        # _var0 可能代表参数0
+        self.decompile_store_fast_n(ctx, func_args, num)
+
+    def get_func_args_name(self, func_args, num):
+        if num < len(func_args):
+            return ASTName(func_args[num])
+        else:
+            return ASTName('_var%d'%num)
+    
+    def decompile_store_fast_n(self, ctx, func_args, num):
+        value = ctx.stack.pop()
+        name_node = self.get_func_args_name(func_args, num)
+        ctx.curblock.append(ASTStore(value, name_node))
+    
     def freeze(self):
         # generate bytecode data
         bc = self.fun_data
@@ -1770,8 +2049,138 @@ def merge_mpy(compiled_modules, output_file):
     else:
         with open(output_file, "wb") as f:
             f.write(merged_mpy)
+def end_line():
+    print()
 
+def print_ordered(ast_dict, child_node, indent):
+    child_type = type(child_node)
+    if child_type is ASTBinary:
+        print('(', end='')
+        print_src(ast_dict, child_node, indent)
+        print(')', end='')
+    else:
+        print_src(ast_dict, child_node, indent)
 
+def print_new_line_indent(indent):
+    print("    "*indent, end='')
+
+def print_src(ast_dict, ast_node, indent):
+    node_type = type(ast_node)
+    if node_type is ASTNodeList:
+        print_ast_node_list(ast_dict, ast_node, indent)
+    elif node_type is ASTStore:
+        print_ast_store(ast_dict, ast_node, indent)
+    elif node_type is ASTName:
+        print('%s' %ast_node.name, end='')
+    elif node_type is ASTCall:
+        print_ast_call(ast_dict, ast_node, indent)
+    elif node_type is ASTReturn:
+        print('return ', end='')
+        print_src(ast_dict, ast_node.value, indent)
+    elif node_type is ASTObject:
+        print('%s' % repr(ast_node.object), end='')
+    elif node_type is ASTBinary:
+        print_ordered(ast_dict, ast_node.left, indent)
+        print(' %s ' %ast_node.op_str, end='')
+        print_ordered(ast_dict, ast_node.right, indent)
+    elif node_type is ASTTuple:
+        print_ast_tuple(ast_dict, ast_node, indent)
+    elif node_type is ASTMap:
+        print_ast_map(ast_dict, ast_node, indent)
+    elif node_type is ASTSubscr:
+        print_src(ast_dict, ast_node.name, indent)
+        print('[', end='')
+        print_src(ast_dict, ast_node.key, indent)
+        print(']', end='')
+    elif node_type is ASTBranch:
+        if ast_node.jump_if_true:
+            print('if ', end='')
+        else:
+            print('if not ', end='')
+        print_src(ast_dict, ast_node.expression_node, indent)
+        print(': jump #L%s' %ast_node.jump_to_label, end='')
+    elif node_type is ASTJump:
+        print("jump #L%s" %ast_node.jump_to_label, end='')
+    elif node_type is ASTBlockNoOp:
+        pass
+        # print("#-------------------------------- BLOCK SPLIT --------------------------------", end='')
+    elif node_type is ASTLabel:
+        print("#L%s" % ast_node.label, end='')
+    else:
+        # raise NotImplementedError('%s not implemented yet' %ast_node)
+        print('print_src() for ASTNode: %s not implemented yet' %ast_node)
+
+def print_ast_node_list(ast_dict, ast_node, indent):
+    indent += 1
+    for node in ast_node.nodes:
+        print_new_line_indent(indent)
+        print_src(ast_dict, node, indent)
+        end_line()
+    indent -= 1
+
+def print_ast_map(ast_dict, ast_node, indent):
+    print('{',end='')
+    first = True
+    indent += 1
+    for (key, value) in ast_node.kv_pairs:
+        if first:
+            print()
+        else:
+            print(',')
+        print_new_line_indent(indent)
+        print_src(ast_dict, key, indent)
+        print(': ', end='')
+        print_src(ast_dict, value, indent)
+        first = False
+    indent -= 1
+    print(' }',end='')
+
+def print_ast_tuple(ast_dict, ast_node, indent):
+    values = ast_node.values
+    print('(', end='')
+    first = True
+    for node in values:
+        if not first:
+            print(', ', end='')
+        first = False
+        print_src(ast_dict, node, indent)
+    if len(values) == 1:
+        print(',', end='')
+    print(')', end='')
+
+def print_ast_store(ast_dict, ast_node, indent):
+    if type(ast_node.src_node) is ASTFunction:
+        print('def ', end='')
+        func_name = ast_node.dest_node.name
+        print_src(ast_dict, ast_node.dest_node, indent)
+        args = g_func_args_dict[ast_node.dest_node.name]
+        print('(%s):' %", ".join(args))
+        func_code_node_list = ast_dict[func_name]
+        print_src(ast_dict, func_code_node_list, indent)
+    else:
+        print_src(ast_dict, ast_node.dest_node, indent)
+        print(' = ', end='')
+        print_src(ast_dict, ast_node.src_node, indent)
+
+def print_ast_call(ast_dict, ast_node, indent):
+    print_src(ast_dict, ast_node.func, indent)
+    print('(', end='')
+    first = True
+    for param in ast_node.pparams:
+        if not first:
+            print(", ", end='')
+        first = False
+        print_src(ast_dict, param, indent)
+
+    for (k, v) in ast_node.kwparams:
+        if not first:
+            print(", ", end='')
+        first = False
+        print_src(ast_dict, k, indent)
+        print(" = ", end='')
+        print_src(ast_dict, v, indent)
+    print(')', end='')
+ 
 def main():
     global global_qstrs
 
@@ -1842,7 +2251,8 @@ def main():
         if args.hexdump:
             print()
         disassemble_mpy(compiled_modules)
-
+        print('------ start printing root source: ------')
+        print_src(g_ast_dict, g_ast_dict['<module>'], -1)
     if args.freeze:
         try:
             freeze_mpy(base_qstrs, compiled_modules)

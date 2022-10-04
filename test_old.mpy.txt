@@ -1,0 +1,179 @@
+eggfly@eggfly-4 ~/micropython$  /usr/bin/env /opt/homebrew/bin/python3 /Users/eggfly/.vscode/extensions/ms-python.pyth
+on-2022.14.0/pythonFiles/lib/python/debugpy/adapter/../../debugpy/launcher 53317 -- /Users/eggfly/micropython/tools/mp
+y-tool.py -d test.mpy 
+mpy_source_file: test.mpy
+source_file: ./test.py
+header: 4d:06:01:1f
+qstr_table[14]:
+    ./test.py
+    <module>
+    os
+    test
+    do nothing
+    test0
+    test1
+    test2
+    a > 1
+    test3
+    123
+    test4
+    value
+    print
+obj_table: ['a <= 1, b = 2', 'a <= 1, b != 2']
+simple_name: <module>
+  raw bytecode: 46 08:16:01:66:84:07:64:20:64:20:84:16:65:80:51:1b:02:16:02:32:00:16:03:32:01:16:05:32:02:16:06:32:03:16:07:11:07:34:00:59:32:04:16:09:51:63
+  prelude: n_state=2, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 66:84:07:64:20:64:20:84:16:65
+  80          LOAD_CONST_SMALL_INT_0 
+  51          LOAD_CONST_NONE 
+  1b:02       IMPORT_NAME os
+  16:02       STORE_NAME os
+  32:00       MAKE_FUNCTION 0
+  16:03       STORE_NAME test
+  32:01       MAKE_FUNCTION 1
+  16:05       STORE_NAME test0
+  32:02       MAKE_FUNCTION 2
+  16:06       STORE_NAME test1
+  32:03       MAKE_FUNCTION 3
+  16:07       STORE_NAME test2
+  11:07       LOAD_NAME test2
+  34:00       CALL_FUNCTION 0
+  59          POP_TOP 
+  32:04       MAKE_FUNCTION 4
+  16:09       STORE_NAME test3
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: ['test', 'test0', 'test1', 'test2', 'test3']
+simple_name: test
+  raw bytecode: 18 21:0e:03:0c:60:20:22:22:22:81:c1:82:c2:83:c3:10:04:63
+  prelude: n_state=5, n_exc_stack=0, scope_flags=0, n_pos_args=1, n_kwonly_args=0, n_def_pos_args=0
+  args: ['value']
+  line info: 60:20:22:22:22
+  81          LOAD_CONST_SMALL_INT_1 
+  c1          STORE_FAST_1 
+  82          LOAD_CONST_SMALL_INT_2 
+  c2          STORE_FAST_2 
+  83          LOAD_CONST_SMALL_INT_3 
+  c3          STORE_FAST_3 
+  10:04       LOAD_CONST_STRING do nothing
+  63          RETURN_VALUE 
+  children: []
+simple_name: test0
+  raw bytecode: 7 00:06:05:80:0b:51:63
+  prelude: n_state=1, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 80:0b
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: []
+simple_name: test1
+  raw bytecode: 7 00:06:06:80:0f:51:63
+  prelude: n_state=1, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 80:0f
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: []
+simple_name: test2
+  raw bytecode: 134 58:26:07:80:13:22:22:22:22:26:29:25:49:25:49:27:20:25:22:25:24:81:c0:82:c1:80:c2:42:4a:12:0d:b2:34:01:59:b2:81:e5:c2:b2:8a:d7:43:31:b0:81:d8:44:49:12:0d:10:08:34:01:59:42:55:b1:82:d9:44:49:12:0d:23:00:34:01:59:42:47:12:0d:23:01:34:01:59:b1:82:d9:44:42:42:49:b0:81:d9:44:42:42:40:42:30:12:0d:12:0d:12:0d:12:0d:12:0d:12:0d:12:0d:12:0d:12:0d:34:00:34:01:34:01:34:01:34:01:34:01:34:01:34:01:34:01:59:51:63
+  prelude: n_state=12, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 80:13:22:22:22:22:26:29:25:49:25:49:27:20:25:22:25:24
+  81          LOAD_CONST_SMALL_INT_1 
+  c0          STORE_FAST_0 
+  82          LOAD_CONST_SMALL_INT_2 
+  c1          STORE_FAST_1 
+  80          LOAD_CONST_SMALL_INT_0 
+  c2          STORE_FAST_2 
+  42:4a       JUMP 10
+  12:0d       LOAD_GLOBAL print
+  b2          LOAD_FAST_2 
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  b2          LOAD_FAST_2 
+  81          LOAD_CONST_SMALL_INT_1 
+  e5          BINARY_OP_14(__iadd__) 
+  c2          STORE_FAST_2 
+  b2          LOAD_FAST_2 
+  8a          LOAD_CONST_SMALL_INT_10 
+  d7          BINARY_OP_0(__lt__) 
+  43:31       POP_JUMP_IF_TRUE -15
+  b0          LOAD_FAST_0 
+  81          LOAD_CONST_SMALL_INT_1 
+  d8          BINARY_OP_1(__gt__) 
+  44:49       POP_JUMP_IF_FALSE 9
+  12:0d       LOAD_GLOBAL print
+  10:08       LOAD_CONST_STRING a > 1
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  42:55       JUMP 21
+  b1          LOAD_FAST_1 
+  82          LOAD_CONST_SMALL_INT_2 
+  d9          BINARY_OP_2(__eq__) 
+  44:49       POP_JUMP_IF_FALSE 9
+  12:0d       LOAD_GLOBAL print
+  23:00       LOAD_CONST_OBJ 'a <= 1, b = 2'
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  42:47       JUMP 7
+  12:0d       LOAD_GLOBAL print
+  23:01       LOAD_CONST_OBJ 'a <= 1, b != 2'
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  b1          LOAD_FAST_1 
+  82          LOAD_CONST_SMALL_INT_2 
+  d9          BINARY_OP_2(__eq__) 
+  44:42       POP_JUMP_IF_FALSE 2
+  42:49       JUMP 9
+  b0          LOAD_FAST_0 
+  81          LOAD_CONST_SMALL_INT_1 
+  d9          BINARY_OP_2(__eq__) 
+  44:42       POP_JUMP_IF_FALSE 2
+  42:40       JUMP 0
+  42:30       JUMP -16
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  12:0d       LOAD_GLOBAL print
+  34:00       CALL_FUNCTION 0
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: []
+simple_name: test3
+  raw bytecode: 18 10:0a:09:80:2c:23:26:32:00:c0:b0:10:0a:34:01:59:51:63
+  prelude: n_state=3, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 80:2c:23:26
+  32:00       MAKE_FUNCTION 0
+  c0          STORE_FAST_0 
+  b0          LOAD_FAST_0 
+  10:0a       LOAD_CONST_STRING 123
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: ['test4']
+simple_name: test4
+  raw bytecode: 8 09:08:0b:0c:80:2c:51:63
+  prelude: n_state=2, n_exc_stack=0, scope_flags=0, n_pos_args=1, n_kwonly_args=0, n_def_pos_args=0
+  args: ['value']
+  line info: 80:2c
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: []
+eggfly@eggfly-4 ~/micropython$ 

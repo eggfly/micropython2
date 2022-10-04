@@ -1,0 +1,46 @@
+tool.py -d test.mpy 
+mpy_source_file: test.mpy
+source_file: ./test.py
+header: 4d:06:01:1f
+qstr_table[4]:
+    ./test.py
+    <module>
+    test2
+    print
+obj_table: []
+simple_name: <module>
+  raw bytecode: 17 00:08:01:20:84:07:32:00:16:02:11:02:34:00:59:51:63
+  prelude: n_state=1, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 20:84:07
+  32:00       MAKE_FUNCTION 0
+  16:02       STORE_NAME test2
+  11:02       LOAD_NAME test2
+  34:00       CALL_FUNCTION 0
+  59          POP_TOP 
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: ['test2']
+simple_name: test2
+  raw bytecode: 28 10:0a:02:40:22:22:26:80:c0:42:4a:12:03:b0:34:01:59:b0:81:e5:c0:b0:8a:d7:43:31:51:63
+  prelude: n_state=3, n_exc_stack=0, scope_flags=0, n_pos_args=0, n_kwonly_args=0, n_def_pos_args=0
+  args: []
+  line info: 40:22:22:26
+  80          LOAD_CONST_SMALL_INT_0 
+  c0          STORE_FAST_0 
+  42:4a       JUMP 10
+  12:03       LOAD_GLOBAL print
+  b0          LOAD_FAST_0 
+  34:01       CALL_FUNCTION 1
+  59          POP_TOP 
+  b0          LOAD_FAST_0 
+  81          LOAD_CONST_SMALL_INT_1 
+  e5          BINARY_OP_14(__iadd__) 
+  c0          STORE_FAST_0 
+  b0          LOAD_FAST_0 
+  8a          LOAD_CONST_SMALL_INT_10 
+  d7          BINARY_OP_0(__lt__) 
+  43:31       POP_JUMP_IF_TRUE -15
+  51          LOAD_CONST_NONE 
+  63          RETURN_VALUE 
+  children: []
