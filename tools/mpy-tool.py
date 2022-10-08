@@ -1099,6 +1099,10 @@ class RawCodeBytecode(RawCode):
             ctx.stack.append(ASTName(arg))
         elif opcode == Opcode.MP_BC_LOAD_CONST_NONE:
             ctx.stack.append(ASTObject(None))
+        elif opcode == Opcode.MP_BC_LOAD_CONST_TRUE:
+            ctx.stack.append(ASTObject(True))
+        elif opcode == Opcode.MP_BC_LOAD_CONST_FALSE:
+            ctx.stack.append(ASTObject(False))
         elif opcode == Opcode.MP_BC_LOAD_CONST_OBJ:
             self.decompile_load_const_obj(ctx, arg)
         elif opcode == Opcode.MP_BC_IMPORT_NAME:
@@ -1111,6 +1115,11 @@ class RawCodeBytecode(RawCode):
         elif opcode == Opcode.MP_BC_STORE_ATTR:
             self.decompile_store_attr(ctx, arg)
         elif opcode == Opcode.MP_BC_MAKE_FUNCTION:
+            # MAKE_FUNCTION then STORE_NAME
+            ctx.stack.append(ASTFunction()) # TODO
+        elif opcode == Opcode.MP_BC_MAKE_FUNCTION_DEFARGS:
+            default_arg = ctx.stack.pop()
+            # MAKE_FUNCTION then STORE_NAME
             ctx.stack.append(ASTFunction()) # TODO
         elif opcode == Opcode.MP_BC_RETURN_VALUE:
             value = ctx.stack.pop()
@@ -1120,8 +1129,15 @@ class RawCodeBytecode(RawCode):
         elif opcode == Opcode.MP_BC_CALL_METHOD:
             self.decompile_call_method(ctx, arg)
         elif opcode == Opcode.MP_BC_POP_TOP:
-            value = ctx.stack.pop()
-            ctx.curblock.append(value)
+            self.decompile_pop_top(ctx)
+        elif opcode == Opcode.MP_BC_DUP_TOP:
+            self.decompile_dup_top(ctx)
+        elif opcode == Opcode.MP_BC_DUP_TOP_TWO:
+            self.decompile_dup_top_two(ctx)
+        elif opcode == Opcode.MP_BC_ROT_TWO:
+            self.decompile_rot_two(ctx)
+        elif opcode == Opcode.MP_BC_ROT_THREE:
+            self.decompile_rot_three(ctx)
         elif opcode == Opcode.MP_BC_BUILD_TUPLE:
             self.decompile_build_tuple(ctx, arg)
         elif opcode == Opcode.MP_BC_IMPORT_FROM:
@@ -1135,6 +1151,8 @@ class RawCodeBytecode(RawCode):
         elif opcode == Opcode.MP_BC_BUILD_MAP:
             ast_map = ASTMap(arg)
             ctx.stack.append(ast_map)
+        elif opcode == Opcode.MP_BC_BUILD_LIST:
+            self.decompile_build_list(ctx, arg)
         elif opcode == Opcode.MP_BC_STORE_MAP:
             self.decompile_store_map(ctx)
         elif opcode == Opcode.MP_BC_LOAD_BUILD_CLASS:
@@ -1145,13 +1163,52 @@ class RawCodeBytecode(RawCode):
             self.decompile_pop_jump_if_false(ctx, arg, line.jump_to_label)
         elif opcode == Opcode.MP_BC_JUMP:
             self.decompile_jump(ctx, arg, line.jump_to_label)
+        elif opcode == Opcode.MP_BC_LOAD_NULL:
+            # sentinel indicating empty default positional args or keyword args
+            pass
         else:
             # raise NotImplementedError('%s not implemented yet' %opcode_str)
             print('%s not implemented yet' %opcode_str)
 
+    def decompile_rot_three(self, ctx):
+        one = ctx.stack.pop()
+        two = ctx.stack.pop()
+        three = ctx.stack.pop()
+        ctx.stack.append(one)
+        ctx.stack.append(three)
+        ctx.stack.append(two)
+
+    def decompile_rot_two(self, ctx):
+        one = ctx.stack.pop()
+        two = ctx.stack.pop()
+        ctx.stack.append(one)
+        ctx.stack.append(two)
+
+    def decompile_pop_top(self, ctx):
+        value = ctx.stack.pop()
+        ctx.curblock.append(value)
+
+    def decompile_dup_top(self, ctx):
+        top_value = ctx.stack[-1]
+        ctx.stack.append(top_value)
+
+    def decompile_dup_top_two(self, ctx):
+        first_value = ctx.stack[-1]
+        second_value = ctx.stack[-2]
+        ctx.stack.append(second_value)
+        ctx.stack.append(first_value)
+
+    def decompile_build_list(self, ctx, arg):
+        size = arg
+        values = []
+        for i in range(size):
+            values.insert(0, ctx.stack.pop())
+        ast_list = ASTList(values, arg)
+        ctx.stack.append(ast_list)
+
     def decompile_pop_jump_if_true(self, ctx, arg, jump_to_label):
         expr = ctx.stack.pop()
-        ctx.block.append(ASTBranch(expr, True, arg, jump_to_label))
+        ctx.curblock.append(ASTBranch(expr, True, arg, jump_to_label))
 
     def decompile_pop_jump_if_false(self, ctx, arg, jump_to_label):
         expr = ctx.stack.pop()
@@ -1199,6 +1256,10 @@ class RawCodeBytecode(RawCode):
             binary_node = ASTBinary(left, right, '__iadd__', '+')
         elif binary_op_name == '__add__':
             binary_node = ASTBinary(left, right, '__add__', '+')
+        elif binary_op_name == '__sub__':
+            binary_node = ASTBinary(left, right, '__sub__', '-')
+        elif binary_op_name == '__and__':
+            binary_node = ASTBinary(left, right, '__and__', '&')
         elif binary_op_name == '__gt__':
             binary_node = ASTBinary(left, right, '__gt__', '>')
         elif binary_op_name == '__lt__':
@@ -1217,7 +1278,7 @@ class RawCodeBytecode(RawCode):
             values[arg-i-1] = ctx.stack.pop()
         ctx.stack.append(ASTTuple(values))
 
-    def decompile_load_subscr(self, ctx):
+    def decompile_load_subscr(self, ctx): # TODO check slice case
         subscr = ctx.stack.pop()
         src = ctx.stack.pop()
         ctx.stack.append(ASTSubscr(src, subscr))
@@ -2119,7 +2180,7 @@ def print_ast_node_list(ast_dict, ast_node, indent):
     indent -= 1
 
 def print_ast_map(ast_dict, ast_node, indent):
-    print('{',end='')
+    print('{', end='')
     first = True
     indent += 1
     for (key, value) in ast_node.kv_pairs:

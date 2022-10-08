@@ -163,6 +163,14 @@ class ASTMap:
     def __repr__(self) -> str:
         return 'ASTMap(%s, target_size=%s)' % (self.kv_pairs, self.target_size)
 
+class ASTList:
+    def __init__(self, values, target_size) -> None:
+        self.values = values
+        self.target_size = target_size
+
+    def __repr__(self) -> str:
+        return 'ASTList(%s, target_size=%s)' % (self.values, self.target_size)
+
 
 class ASTLoadBuildClass:
     def __init__(self) -> None:
